@@ -2,21 +2,23 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, StratifiedKFold
+from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
 import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore')
 
 # ============================================================
-# This notebook was developed and run in Jupyter Notebook.
-# To run: jupyter notebook nids_solution.py
-# Or open as .ipynb in Jupyter/Colab.
+# Developed in Jupyter Notebook; also runs as a plain script:
+#     python nids_solution.py
+# (downloads NSL-KDD automatically, ~2 MB)
 # ============================================================
 
 SEED = 42
@@ -125,6 +127,7 @@ print(pd.Series(y_train_balanced).value_counts())
 # DoS->0, Normal->1, Probe->2, R2L->3, U2R->4
 le_target = LabelEncoder()
 y_train_balanced_enc = le_target.fit_transform(y_train_balanced)
+y_train_enc = le_target.transform(y_train)   # original (pre-SMOTE) labels, for CV
 y_test_enc = le_target.transform(y_test)
 
 print("\nLabel mapping:")
@@ -188,15 +191,28 @@ for name, model in models.items():
     # XGBoost needs numeric labels
     if name == "XGBoost":
         y_tr = y_train_balanced_enc
+        y_cv = y_train_enc
         y_te = y_test_enc
     else:
         y_tr = y_train_balanced
+        y_cv = y_train
         y_te = y_test
 
-    print("Running cross-validation...")
+    # Cross-validation with SMOTE INSIDE each fold.
+    # Running CV on the already-oversampled data leaks: synthetic samples are
+    # interpolated from real neighbours, so near-copies of the same record land
+    # in both the training and validation folds and the CV score is inflated
+    # (~0.99). The pipeline re-runs SMOTE on each fold's training part only,
+    # so validation folds contain real, unseen records.
+    print("Running cross-validation (SMOTE inside each fold)...")
+    cv_pipeline = Pipeline([
+        ("smote", SMOTE(random_state=SEED, k_neighbors=3)),
+        ("model", clone(model)),
+    ])
     cv_scores = cross_val_score(
-        model, X_train_balanced, y_tr,
-        cv=5, scoring='f1_macro', n_jobs=-1
+        cv_pipeline, X_train, y_cv,
+        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED),
+        scoring='f1_macro', n_jobs=1
     )
     print(f"CV Macro F1: {cv_scores.mean():.4f} (± {cv_scores.std():.4f})")
 

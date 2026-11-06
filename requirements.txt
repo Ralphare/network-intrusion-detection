@@ -1,10 +1,12 @@
-pandas
-numpy
-scikit-learn
-xgboost
-lightgbm
-catboost
-imbalanced-learn
-matplotlib
-seaborn
+# Versions used for the results in README.md (Python 3.13).
+# Other versions run fine but can shift the scores slightly.
+pandas==3.0.5
+numpy==2.5.3
+scikit-learn==1.9.1
+xgboost==3.4.1
+lightgbm==4.7.0
+catboost==1.2.10
+imbalanced-learn==0.14.2
+matplotlib==3.11.2
+seaborn==0.13.2
 jupyter
